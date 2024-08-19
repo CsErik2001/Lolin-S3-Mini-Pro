@@ -1,6 +1,6 @@
 # Lolin-S3-Mini-Pro
 
-##Pins
+## Pins
 
 - SPI_MOSI - PIN38
 - SPI_MISO - PIN39
