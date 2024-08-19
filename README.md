@@ -1,1 +1,24 @@
 # Lolin-S3-Mini-Pro
+
+##Pins
+
+- SPI_MOSI - PIN38
+- SPI_MISO - PIN39
+- SPI_CLK  - PIN40
+
+- TFT_BL   - PIN33
+- TFT_DC   - PIN36
+- TFT_CS   - PIN35
+- TFT_RST  - PIN34
+
+- I2C_SDA  - PIN12
+- I2C_SCL  - PIN11
+
+- RGB_POWER - PIN7
+- RGB_DATA  - PIN8
+
+- IR       - PIN9
+
+- BUTTON0  - PIN0
+- BUTTON47 - PIN47
+- BUTTON48 - PIN48
