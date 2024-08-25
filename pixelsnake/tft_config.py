@@ -2,14 +2,6 @@ from machine import Pin, SPI
 import st7789py as st7789
 import s3minipro as helper
 
-
-TFA = 1
-BFA = 3
-WIDE = 1
-TALL = 0
-SCROLL = 0
-FEATHERS = 1
-
 def config(rotation=0):
 
     return st7789.ST7789(

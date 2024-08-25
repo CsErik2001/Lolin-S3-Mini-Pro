@@ -9,214 +9,187 @@ import s3minipro as helper
 from machine import Pin, Timer
 import boot_icon as icon
 
-# Constants
-SNAKE_SIZE = 8
-SCREEN_WIDTH, SCREEN_HEIGHT = 128, 128
+class SnakeGame:
+    SNAKE_SIZE = 8
+    SCREEN_WIDTH, SCREEN_HEIGHT = 128, 128
 
-# Directions
-UP = 0
-DOWN = 1
-LEFT = 2
-RIGHT = 3
+    # Directions
+    UP = 0
+    DOWN = 1
+    LEFT = 2
+    RIGHT = 3
 
-# Initialize RGB LED
-led = Pin(helper.RGB_POWER, Pin.OUT)
-rgb_timer = Timer(0)
+    def __init__(self):
+        self.snake = [(64, 64), (56, 64), (48, 64)]
+        self.direction = self.RIGHT
+        self.new_direction = self.direction
+        self.food = self.generate_food()
+        self.paused = False
+        self.game_over = False
 
-# Initialize display
-display = tft_config.config(0)
+        # Initialize RGB LED
+        self.led = Pin(helper.RGB_POWER, Pin.OUT)
+        self.rgb_timer = Timer(0)
 
-# Initialize buttons
-btn_left = helper.button0
-btn_right = helper.button48
-btn_restart = helper.button47
+        # Initialize display
+        self.display = tft_config.config(0)
 
-# Snake initial position
-snake = [(64, 64), (56, 64), (48, 64)]
-direction = RIGHT
-new_direction = direction
+    def setup(self):
+        self.initialize_display()
+        self.initialize_game()
+        self.setup_interrupts()
 
-# Food initial position
-food = (random.randint(0, (SCREEN_WIDTH // SNAKE_SIZE) - 1) * SNAKE_SIZE,
-        random.randint(0, (SCREEN_HEIGHT // SNAKE_SIZE) - 1) * SNAKE_SIZE)
+    def initialize_display(self):
+        self.display.fill(st7789.BLACK)
+        self.display.bitmap(icon, 0, 0, 0)
+        sleep(3)
 
-# Pause state
-paused = False
-game_over = False
+    def initialize_game(self):
+        self.snake = [(64, 64), (56, 64), (48, 64)]
+        self.direction = self.RIGHT
+        self.new_direction = self.direction
+        self.food = self.generate_food()
+        self.display.fill(st7789.BLACK)
+        self.led.value(0)
+        self.paused = False
+        self.draw_snake()
+        self.draw_food()
 
+    def generate_food(self):
+        return (random.randint(0, (self.SCREEN_WIDTH // self.SNAKE_SIZE) - 1) * self.SNAKE_SIZE,
+                random.randint(0, (self.SCREEN_HEIGHT // self.SNAKE_SIZE) - 1) * self.SNAKE_SIZE)
 
-def initialize_display():
-    display.fill(st7789.BLACK)
-    display.bitmap(icon, 0, 0, 0)
-    sleep(3)
+    def draw_rect(self, x, y, color):
+        self.display.fill_rect(x, y, self.SNAKE_SIZE, self.SNAKE_SIZE, color)
 
+    def draw_snake(self):
+        for segment in self.snake:
+            self.draw_rect(segment[0], segment[1], st7789.GREEN)
 
-def initialize_game():
-    global snake, direction, new_direction, food, paused
-    snake = [(64, 64), (56, 64), (48, 64)]
-    direction = RIGHT
-    new_direction = direction
-    food = (random.randint(0, (SCREEN_WIDTH // SNAKE_SIZE) - 1) * SNAKE_SIZE,
-            random.randint(0, (SCREEN_HEIGHT // SNAKE_SIZE) - 1) * SNAKE_SIZE)
-    display.fill(st7789.BLACK)
-    led.value(0)
-    paused = False
-    draw_snake()
-    draw_food()
+    def draw_food(self):
+        self.draw_rect(self.food[0], self.food[1], st7789.RED)
 
+    def pause_screen(self):
+        self.led.value(1)
+        self.display.fill(st7789.BLUE)
+        helper.rgb_led(0, 0, 1)  # Blue LED to indicate paused state
+        self.display.text(font, "Paused", 40, 38, st7789.BLUE, st7789.WHITE)
+        self.display.text(font, f"Points: {str(len(self.snake) - 3)}", 27, 94, st7789.WHITE, st7789.BLUE)
 
-def draw_rect(x, y, color):
-    display.fill_rect(x, y, SNAKE_SIZE, SNAKE_SIZE, color)
+    def game_over_screen(self):
+        self.paused = False
+        self.led.value(1)
+        helper.rgb_led(1, 0, 0)  # Red LED for game over
+        self.display.fill(st7789.RED)
+        self.display.text(font, "Game Over!", 25, 10, st7789.WHITE, st7789.RED)
+        self.display.text(font, f"Points: {str(len(self.snake) - 3)}", 27, 56, st7789.WHITE, st7789.RED)
+        self.display.text(font, "Press", 27, 90, st7789.WHITE, st7789.RED)
+        self.display.text(font, "RED", 73, 90, st7789.RED, st7789.WHITE)
+        self.display.text(font, "to restart.", 23, 110, st7789.WHITE, st7789.RED)
 
+    def move_snake(self):
+        self.direction = self.new_direction
+        head_x, head_y = self.snake[0]
 
-def draw_snake():
-    for segment in snake:
-        draw_rect(segment[0], segment[1], st7789.GREEN)
+        if self.direction == self.UP:
+            head_y -= self.SNAKE_SIZE
+        elif self.direction == self.DOWN:
+            head_y += self.SNAKE_SIZE
+        elif self.direction == self.LEFT:
+            head_x -= self.SNAKE_SIZE
+        elif self.direction == self.RIGHT:
+            head_x += self.SNAKE_SIZE
 
+        new_head = (head_x, head_y)
 
-def draw_food():
-    draw_rect(food[0], food[1], st7789.RED)
+        if new_head == self.food:
+            self.food = self.generate_food()
+            self.flash_rgb_led(1, 1, 0)
+        else:
+            self.snake.pop()
 
+        self.snake.insert(0, new_head)
 
-def move_snake():
-    global snake, food, direction, new_direction
+    def check_collision(self):
+        head = self.snake[0]
+        if head[0] < 0 or head[0] >= self.SCREEN_WIDTH or head[1] < 0 or head[1] >= self.SCREEN_HEIGHT:
+            return True
+        if head in self.snake[1:]:
+            return True
+        return False
 
-    direction = new_direction
-    head_x, head_y = snake[0]
+    def setup_interrupts(self):
+        helper.button0.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.change_direction)
+        helper.button48.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.change_direction)
+        helper.button47.irq(trigger=machine.Pin.IRQ_FALLING, handler=self.change_direction)
 
-    if direction == UP:
-        head_y -= SNAKE_SIZE
-    elif direction == DOWN:
-        head_y += SNAKE_SIZE
-    elif direction == LEFT:
-        head_x -= SNAKE_SIZE
-    elif direction == RIGHT:
-        head_x += SNAKE_SIZE
+    def change_direction(self, pin):
+        if self.game_over:
+            return
 
-    new_head = (head_x, head_y)
+        if pin == helper.button0:
+            if self.direction == self.UP:
+                self.new_direction = self.LEFT
+            elif self.direction == self.DOWN:
+                self.new_direction = self.RIGHT
+            elif self.direction == self.LEFT:
+                self.new_direction = self.DOWN
+            elif self.direction == self.RIGHT:
+                self.new_direction = self.UP
+        elif pin == helper.button48:
+            if self.direction == self.UP:
+                self.new_direction = self.RIGHT
+            elif self.direction == self.DOWN:
+                self.new_direction = self.LEFT
+            elif self.direction == self.LEFT:
+                self.new_direction = self.UP
+            elif self.direction == self.RIGHT:
+                self.new_direction = self.DOWN
+        elif pin == helper.button47:
+            if not self.game_over:
+                self.paused = not self.paused  # Toggle pause state
+                if self.paused:
+                    self.pause_screen()
+                else:
+                    self.led.value(0)
+                    self.display.fill(st7789.BLACK)
+                    self.draw_snake()
+                    self.draw_food()
 
-    if new_head == food:
-        food = (random.randint(0, (SCREEN_WIDTH // SNAKE_SIZE) - 1) * SNAKE_SIZE,
-                random.randint(0, (SCREEN_HEIGHT // SNAKE_SIZE) - 1) * SNAKE_SIZE)
-        flash_rgb_led(1, 1, 0)
-    else:
-        snake.pop()
+    def flash_rgb_led(self, r, g, b):
+        self.led.value(1)
+        helper.rgb_led(r, g, b)
+        self.rgb_timer.init(mode=Timer.ONE_SHOT, period=1000, callback=lambda t: self.led.value(0))
 
-    snake.insert(0, new_head)
+    def reset_game(self):
+        self.game_over = False
+        self.initialize_game()
 
+    def main_loop(self):
+        while True:
+            self.game_over = False
+            while not self.game_over:
+                if not self.paused:
+                    self.display.fill(st7789.BLACK)
+                    self.draw_snake()
+                    self.draw_food()
+                    self.move_snake()
 
-def check_collision():
-    head = snake[0]
-    if head[0] < 0 or head[0] >= SCREEN_WIDTH or head[1] < 0 or head[1] >= SCREEN_HEIGHT:
-        return True
-    if head in snake[1:]:
-        return True
-    return False
+                    if self.check_collision():
+                        self.game_over = True
 
+                    sleep(0.5)
+                    gc.collect()
 
-def flash_rgb_led(r, g, b):
-    led.value(1)
-    helper.rgb_led(r, g, b)
-    rgb_timer.init(mode=Timer.ONE_SHOT, period=1000, callback=lambda t: led.value(0))
+            self.game_over_screen()
 
+            while self.game_over:
+                if helper.button47.value() == 0:
+                    self.reset_game()
+                    self.game_over = False
 
-def change_direction(pin):
-    global new_direction, direction, paused, game_over
-
-    if game_over:
-        return
-
-    if pin == btn_left:
-        if direction == UP:
-            new_direction = LEFT
-        elif direction == DOWN:
-            new_direction = RIGHT
-        elif direction == LEFT:
-            new_direction = DOWN
-        elif direction == RIGHT:
-            new_direction = UP
-    elif pin == btn_right:
-        if direction == UP:
-            new_direction = RIGHT
-        elif direction == DOWN:
-            new_direction = LEFT
-        elif direction == LEFT:
-            new_direction = UP
-        elif direction == RIGHT:
-            new_direction = DOWN
-    elif pin == btn_restart:
-        if not game_over:
-            paused = not paused  # Toggle pause state
-            if paused:
-                pause_screen()
-            else:
-                led.value(0)
-                display.fill(st7789.BLACK)
-                draw_snake()
-                draw_food()
-
-
-def reset_game():
-    global game_over
-    game_over = False
-    initialize_game()
-
-
-def pause_screen():
-    led.value(1)
-    display.fill(st7789.BLUE)
-    helper.rgb_led(0, 0, 1)  # Blue LED to indicate paused state
-    display.text(font, "Paused", 40, 38, st7789.BLUE, st7789.WHITE)
-    display.text(font, f"Points: {str(len(snake) - 3)}", 27, 94, st7789.WHITE, st7789.BLUE)
-
-
-def game_over_screen():
-    global paused
-    paused = False
-    led.value(1)
-    helper.rgb_led(1, 0, 0)
-    display.fill(st7789.RED)
-    display.text(font, "Game Over!", 25, 10, st7789.WHITE, st7789.RED)
-    display.text(font, f"Points: {str(len(snake) - 3)}", 27, 56, st7789.WHITE, st7789.RED)
-    display.text(font, "Press", 27, 90, st7789.WHITE, st7789.RED)
-    display.text(font, "RED", 73, 90, st7789.RED, st7789.WHITE)
-    display.text(font, "to restart.", 23, 110, st7789.WHITE, st7789.RED)
-
-
-def main_loop():
-    global game_over
-
-    while True:
-        game_over = False
-        while not game_over:
-            if not paused:
-                display.fill(st7789.BLACK)
-                draw_snake()
-                draw_food()
-                move_snake()
-
-                if check_collision():
-                    game_over = True
-
-                sleep(0.5)
-                gc.collect()
-
-        game_over_screen()
-
-        while game_over:
-            if btn_restart.value() == 0:
-                reset_game()
-                game_over = False
-
-
-def setup():
-    initialize_display()
-    initialize_game()
-    btn_left.irq(trigger=machine.Pin.IRQ_FALLING, handler=change_direction)
-    btn_right.irq(trigger=machine.Pin.IRQ_FALLING, handler=change_direction)
-    btn_restart.irq(trigger=machine.Pin.IRQ_FALLING, handler=change_direction)
-
-
+# Main Execution
 if __name__ == "__main__":
-    setup()
-    main_loop()
+    game = SnakeGame()
+    game.setup()
+    game.main_loop()
