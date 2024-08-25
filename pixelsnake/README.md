@@ -1,4 +1,4 @@
-# Snake Game on ESP32 with ST7789 Display
+# PixelSnake
 
 This project implements a classic Snake game on an ESP32 microcontroller with an ST7789 display. The game features RGB LED effects, game pause functionality, and a game over screen with score display. The game is controlled using three buttons for direction and game control.
 
